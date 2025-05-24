@@ -1,6 +1,7 @@
 # Financial ETL Pipeline Cookbook
 
-This is personal repository to build open-source analytical ETL pipeline for financial reporting using AWS S3 for storage and open-source tools for processing and analytics.
+This is personal repository to build open-source analytical ETL pipeline for financial reporting,
+using AWS S3 for storage and open-source tools for processing and analytics.
 
 ## Table of Contents
 - [Overview](#overview)
