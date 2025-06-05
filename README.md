@@ -1,281 +1,79 @@
-# Financial ETL Pipeline Cookbook
+# Financial Reporting ETL Pipeline
 
-This is personal repository to build open-source analytical ETL pipeline for financial reporting,
-using AWS S3 for storage and open-source tools for processing and analytics.
+A cost-optimized AWS S3 + open-source analytical pipeline for financial reporting.
 
-## Table of Contents
-- [Overview](#overview)
-- [Architecture](#architecture)
-- [Cost Structure](#cost-structure)
-- [Prerequisites](#prerequisites)
-- [Setup Guide](#setup-guide)
-- [Usage Guide](#usage-guide)
-- [Development](#development)
-- [Maintenance](#maintenance)
-- [Troubleshooting](#troubleshooting)
-- [Contributing](#contributing)
-- [License](#license)
+![Infrastructure Diagram](docs/images/infrastructure.png)
 
 ## Overview
 
-This repository provides a step-by-step solution to build an analytical ETL pipeline for financial reporting. 
-It combines AWS S3 for reliable data storage with open-source tools for processing and visualization to create a cost-effective, production-ready solution.
+This repository provides a complete solution for building an analytical ETL pipeline for financial reporting. It leverages AWS S3 for storage while using open-source technologies for processing and analysis to optimize costs.
 
-### Features
-- Collect financial data from public APIs
-- Store raw and processed data in AWS S3
-- Transform and model data using dbt
-- Analyze financial metrics with PostgreSQL/TimescaleDB
-- Create interactive dashboards with Metabase
-- Schedule and monitor workflows with Apache Airflow
-
-## Architecture
-
-![Infrastructure Diagram](docs/images/architecture-diagram.png)
-
-### Components
-
-| Layer | Component | Technology | Function |
-|-------|-----------|------------|----------|
-| Data Sources | Financial APIs | Alpha Vantage, FRED, etc. | Provide financial data |
-| Data Lake | Object Storage | AWS S3 | Store raw and processed data |
-| Orchestration | Workflow Manager | Apache Airflow | Schedule and monitor workflows |
-| Processing | Transformation | Python, dbt | Transform and model data |
-| Data Warehouse | Database | PostgreSQL + TimescaleDB | Store and query analytical data |
-| Visualization | Dashboarding | Metabase | Create reports and dashboards |
-
-### Data Flow
-1. Airflow triggers data extraction from financial APIs
-2. Raw data is stored in the AWS S3 Raw zone
-3. Python transformations process the data
-4. Processed data is stored in the AWS S3 Processed zone
-5. Data is loaded into PostgreSQL/TimescaleDB
-6. dbt models transform the data into analytics-ready tables
-7. Metabase connects to the database to generate reports and dashboards
-
-## Cost Structure
+## Tech Stack
 
 | Component | Technology | Monthly Cost | Notes |
 |-----------|------------|--------------|-------|
-| Data Lake | AWS S3 | $1-3 | ~50-100GB storage |
-| Data Warehouse | PostgreSQL/TimescaleDB | $0* | Self-hosted |
-| Orchestration | Apache Airflow | $0* | Self-hosted |
-| Visualization | Metabase | $0* | Self-hosted |
-| Compute Resources | Self-hosted or Cloud VM | $5-20 | Depends on deployment |
-| **Total** | | **$6-23/month** | |
+| Data Storage | AWS S3 | ~$2 | Cost-effective object storage |
+| Orchestration | Apache Airflow | ~$0* | Self-hosted or managed |
+| Transformation | Python + dbt | $0 | Open-source tools |
+| Data Warehouse | PostgreSQL + TimescaleDB | ~$0* | Self-hosted open-source database |
+| Data Sources | Public Financial APIs | $0 | Alpha Vantage, Yahoo Finance, etc. |
+| Reporting | Metabase | $0 | Open-source BI tool |
 
-*Software is free, compute resources cost depends on deployment method.
+*Hosting costs depend on deployment choice: self-hosted, cloud VM ($5-20/month), or existing infrastructure
 
-### Cost Comparison with Full AWS Stack
-| Component | AWS Native | This Solution | Monthly Savings |
-|-----------|------------|---------------|----------------|
-| Data Lake | AWS S3: $1-3 | AWS S3: $1-3 | $0 |
-| Data Warehouse | AWS Redshift: $108-180 | PostgreSQL: $0* | $108-180 |
-| Orchestration | EC2 for Airflow: $20-32 | Self-hosted Airflow: $0* | $20-32 |
-| **Total Savings** | | | **$128-212/month** |
+## Architecture Overview
 
-## Prerequisites
+The pipeline follows these stages:
 
-Before beginning setup, ensure you have:
+1. **Extraction**: Collect financial data from public APIs
+2. **Storage**: Store raw data in AWS S3
+3. **Transformation**: Process data using Airflow and Python
+4. **Loading**: Move processed data to TimescaleDB
+5. **Modeling**: Apply business transformations with dbt
+6. **Visualization**: Create dashboards with Metabase
 
-1. AWS Account with permissions to create:
-   - S3 buckets
-   - IAM roles and policies
+## Getting Started
 
-2. Development environment with:
-   - Docker and Docker Compose
-   - AWS CLI configured
-   - Git
-   - Python 3.8+
+### Prerequisites
 
-3. API access:
-   - Alpha Vantage API key (free tier available)
-   - Other financial APIs as needed
+- AWS Account with S3 access
+- Docker and Docker Compose
+- Git
+- Python 3.8+
 
-## Setup Guide
-
-### 1. Clone the Repository
+### Quick Start
 
 ```bash
-git clone https://github.com/yourusername/financial-etl-cookbook.git
-cd financial-etl-cookbook
-```
+# Clone this repository
+git clone https://github.com/yourusername/financial-etl-pipeline.git
+cd financial-etl-pipeline
 
-### 2. AWS Infrastructure Setup
+# Set up AWS credentials
+aws configure
 
-#### Create S3 Buckets
+# Create S3 buckets
+aws s3 mb s3://financial-reporting-raw
+aws s3 mb s3://financial-reporting-processed
 
-```bash
-# Create raw data bucket
-aws s3 mb s3://financial-reporting-raw-data
+# Configure environment variables
+cp .env.example .env
+# Edit .env with your AWS keys and other configurations
 
-# Create processed data bucket
-aws s3 mb s3://financial-reporting-processed-data
-
-# Enable versioning (optional but recommended)
-aws s3api put-bucket-versioning --bucket financial-reporting-raw-data --versioning-configuration Status=Enabled
-aws s3api put-bucket-versioning --bucket financial-reporting-processed-data --versioning-configuration Status=Enabled
-```
-
-#### Create IAM Policy
-
-Create a file named `s3-policy.json`:
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "s3:ListBucket",
-        "s3:GetObject",
-        "s3:PutObject",
-        "s3:DeleteObject"
-      ],
-      "Resource": [
-        "arn:aws:s3:::financial-reporting-raw-data",
-        "arn:aws:s3:::financial-reporting-raw-data/*",
-        "arn:aws:s3:::financial-reporting-processed-data",
-        "arn:aws:s3:::financial-reporting-processed-data/*"
-      ]
-    }
-  ]
-}
-```
-
-Then create the policy:
-
-```bash
-aws iam create-policy --policy-name FinancialETLPolicy --policy-document file://s3-policy.json
-```
-
-Note the Policy ARN from the output, you'll need it in the next step.
-
-#### Create IAM User for Application
-
-```bash
-# Create user
-aws iam create-user --user-name financial-etl-app
-
-# Attach policy
-aws iam attach-user-policy --user-name financial-etl-app --policy-arn <POLICY_ARN_FROM_PREVIOUS_STEP>
-
-# Create access key
-aws iam create-access-key --user-name financial-etl-app
-```
-
-Save the AccessKeyId and SecretAccessKey from the output. You'll need these for configuration.
-
-### 3. Configure Environment
-
-Create a `.env` file:
-
-```
-# AWS Credentials
-AWS_ACCESS_KEY_ID=your_access_key
-AWS_SECRET_ACCESS_KEY=your_secret_key
-AWS_REGION=us-east-1
-
-# S3 Configuration
-S3_RAW_BUCKET=financial-reporting-raw-data
-S3_PROCESSED_BUCKET=financial-reporting-processed-data
-
-# Database Configuration
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=your_secure_password
-POSTGRES_DB=financial
-
-# Airflow Configuration
-AIRFLOW_UID=50000
-AIRFLOW__CORE__FERNET_KEY=your_fernet_key
-AIRFLOW_ADMIN_USER=admin
-AIRFLOW_ADMIN_PASSWORD=admin_password
-
-# API Keys
-ALPHA_VANTAGE_API_KEY=your_alpha_vantage_key
-```
-
-Generate a Fernet key for Airflow:
-
-```bash
-python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-```
-
-### 4. Start the Infrastructure
-
-```bash
-# Build and start all services
+# Start the infrastructure
 docker-compose up -d
-
-# Initialize Airflow
-docker-compose exec airflow airflow db init
-docker-compose exec airflow airflow users create \
-    --username admin \
-    --password admin \
-    --firstname Admin \
-    --lastname User \
-    --role Admin \
-    --email admin@example.com
 ```
 
-### 5. Access Components
-
-- Airflow: http://localhost:8080
-- Metabase: http://localhost:3000
-- PostgreSQL: localhost:5432
-
-## Usage Guide
-
-### Setting Up Financial Data Sources
-
-1. **Configure Alpha Vantage API**
-   - Sign up for a free API key at [Alpha Vantage](https://www.alphavantage.co/support/#api-key)
-   - Add your API key to the `.env` file
-
-2. **Configure Additional APIs (optional)**
-   - Update the `financial_api_to_s3.py` operator to include additional data sources
-   - Add API keys to the `.env` file
-
-### Running the ETL Pipeline
-
-The pipeline is scheduled to run daily, but you can trigger it manually:
-
-1. Open Airflow UI (http://localhost:8080)
-2. Navigate to DAGs
-3. Find the `financial_reporting_pipeline` DAG
-4. Click "Trigger DAG"
-
-### Creating Financial Dashboards
-
-1. Open Metabase UI (http://localhost:3000)
-2. Complete the initial setup
-3. Connect to the PostgreSQL database
-4. Create questions based on the financial data models
-5. Build dashboards using those questions
-
-Example dashboard setups:
-
-- **Financial Overview Dashboard**
-  - Income Statement Summary
-  - Balance Sheet Summary
-  - Key Financial Ratios
-  - Profit Margin Trends
-
-## Development
-
-### Project Structure
+## Project Structure
 
 ```
-financial-etl-cookbook/
-├── docker-compose.yml          # Infrastructure definition
-├── .env                        # Environment variables
-├── dags/                       # Airflow DAGs
+financial-etl-pipeline/
+├── docker-compose.yml             # Container orchestration
+├── dags/                          # Airflow DAGs
 │   └── financial_reporting_dag.py
-├── plugins/                    # Airflow custom plugins
+├── plugins/                       # Airflow custom plugins
 │   └── operators/
 │       └── financial_api_to_s3.py
-├── dbt_project/                # dbt models
+├── dbt_project/                   # dbt models
 │   ├── dbt_project.yml
 │   ├── profiles.yml
 │   ├── models/
@@ -287,236 +85,501 @@ financial-etl-cookbook/
 │   │       └── financial_kpis.sql
 │   └── macros/
 │       └── financial_ratios.sql
-├── metabase/                   # Metabase dashboards
+├── metabase/                      # Metabase dashboards
 │   └── dashboards/
 │       └── financial_overview.json
-└── docs/                       # Documentation
+└── docs/                          # Documentation
     └── images/
-        └── architecture-diagram.png
+        └── infrastructure.png
 ```
 
-### Customizing the DAGs
+## Implementation Guide
 
-The main DAG is located at `dags/financial_reporting_dag.py`. To modify:
+### 1. AWS S3 Setup
 
-1. Update the list of companies or report types
-2. Change the schedule interval
-3. Add or remove processing steps
+Create two S3 buckets: one for raw data and one for processed data.
 
-Example of adding a new processing step:
+```bash
+aws s3 mb s3://financial-reporting-raw
+aws s3 mb s3://financial-reporting-processed
+```
+
+Set up a dedicated IAM user for the pipeline:
+
+```bash
+aws iam create-user --user-name financial-etl-user
+aws iam attach-user-policy --user-name financial-etl-user --policy-arn arn:aws:iam::aws:policy/AmazonS3FullAccess
+aws iam create-access-key --user-name financial-etl-user
+```
+
+Save the access key and secret key in your `.env` file.
+
+### 2. Docker Infrastructure
+
+The provided `docker-compose.yml` sets up:
+
+- PostgreSQL with TimescaleDB extension
+- Apache Airflow webserver and scheduler
+- dbt for data transformations
+- Metabase for dashboards
+
+```yaml
+version: '3'
+
+services:
+  # PostgreSQL with TimescaleDB
+  timescaledb:
+    image: timescale/timescaledb:latest-pg14
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: financial
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Apache Airflow
+  airflow:
+    image: apache/airflow:2.5.0
+    depends_on:
+      - timescaledb
+    ports:
+      - "8080:8080"
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://postgres:postgres@timescaledb:5432/airflow
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./plugins:/opt/airflow/plugins
+      - ./logs:/opt/airflow/logs
+    command: bash -c "airflow db init && airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com && airflow webserver & airflow scheduler"
+
+  # dbt service
+  dbt:
+    build:
+      context: ./dbt_project
+      dockerfile: Dockerfile
+    depends_on:
+      - timescaledb
+    volumes:
+      - ./dbt_project:/usr/app
+    environment:
+      - DBT_PROFILES_DIR=/usr/app
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}
+    command: /bin/bash -c "tail -f /dev/null"  # Keep container running
+    
+  # Metabase
+  metabase:
+    image: metabase/metabase:latest
+    ports:
+      - "3000:3000"
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: metabase
+      MB_DB_PORT: 5432
+      MB_DB_USER: postgres
+      MB_DB_PASS: postgres
+      MB_DB_HOST: timescaledb
+    depends_on:
+      - timescaledb
+
+volumes:
+  postgres_data:
+```
+
+### 3. Airflow DAG Implementation
+
+The Airflow DAG orchestrates the entire pipeline:
 
 ```python
-# In financial_reporting_dag.py
+# dags/financial_reporting_dag.py
+from datetime import datetime, timedelta
+from airflow import DAG
+from airflow.operators.python import PythonOperator
+from airflow.providers.postgres.operators.postgres import PostgresOperator
+from airflow.providers.amazon.aws.transfers.s3_to_sql import S3ToSqlOperator
+from airflow.operators.bash import BashOperator
+from plugins.operators.financial_api_to_s3 import FinancialApiToS3Operator
 
-# Add a new task
-notify_completion = EmailOperator(
-    task_id='notify_completion',
-    to='finance@example.com',
-    subject='Financial ETL Pipeline Completed',
-    html_content='The financial reporting ETL pipeline has completed successfully.'
-)
+default_args = {
+    'owner': 'airflow',
+    'depends_on_past': False,
+    'email_on_failure': False,
+    'email_on_retry': False,
+    'retries': 1,
+    'retry_delay': timedelta(minutes=5),
+}
 
-# Update dependencies
-run_dbt_transformations >> notify_completion
+# Define companies and financial data types to fetch
+companies = ['AAPL', 'MSFT', 'GOOGL', 'AMZN']
+report_types = ['income_statement', 'balance_sheet', 'cash_flow']
+
+with DAG(
+    'financial_reporting_pipeline',
+    default_args=default_args,
+    description='A pipeline to extract, transform and load financial data',
+    schedule_interval=timedelta(days=1),
+    start_date=datetime(2023, 1, 1),
+    catchup=False,
+    tags=['financial'],
+) as dag:
+
+    # Task to extract data from financial API and store in S3
+    extract_financial_data = FinancialApiToS3Operator(
+        task_id='extract_financial_data',
+        companies=companies,
+        report_types=report_types,
+        s3_bucket='financial-reporting-raw',
+        s3_key='financial_data/{{ ds }}',
+    )
+
+    # Create tables in TimescaleDB
+    create_tables = PostgresOperator(
+        task_id='create_tables',
+        postgres_conn_id='postgres_default',
+        sql="""
+        CREATE TABLE IF NOT EXISTS raw_financial_data (
+            symbol VARCHAR(10),
+            report_type VARCHAR(20),
+            fiscal_date DATE,
+            currency VARCHAR(5),
+            total_revenue NUMERIC(18,2),
+            gross_profit NUMERIC(18,2),
+            operating_income NUMERIC(18,2),
+            net_income NUMERIC(18,2),
+            total_assets NUMERIC(18,2),
+            total_liabilities NUMERIC(18,2),
+            total_equity NUMERIC(18,2),
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        
+        SELECT create_hypertable('raw_financial_data', 'created_at', if_not_exists => TRUE);
+        """
+    )
+
+    # Task to load data from S3 to TimescaleDB
+    load_to_timescaledb = S3ToSqlOperator(
+        task_id='load_to_timescaledb',
+        s3_bucket='financial-reporting-raw',
+        s3_key='financial_data/{{ ds }}',
+        dest_table='raw_financial_data',
+        postgres_conn_id='postgres_default',
+    )
+
+    # Task to run dbt transformations
+    run_dbt_transformations = BashOperator(
+        task_id='run_dbt_transformations',
+        bash_command='docker-compose exec -T dbt dbt run --profiles-dir /usr/app',
+    )
+
+    # Define task dependencies
+    extract_financial_data >> create_tables >> load_to_timescaledb >> run_dbt_transformations
 ```
 
-### Adding New Financial Data Sources
+### 4. Custom S3 Operator
 
-To add a new financial data source:
-
-1. Create a new operator in `plugins/operators/` or extend the existing one
-2. Add the new data source to the DAG
-3. Create corresponding dbt models
-
-Example of adding a new data source:
+Create a custom operator for extracting financial data to S3:
 
 ```python
-# Add to financial_reporting_dag.py
+# plugins/operators/financial_api_to_s3.py
+import json
+import requests
+import pandas as pd
+import io
+from airflow.models import BaseOperator
+from airflow.utils.decorators import apply_defaults
+from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 
-# New task for FRED data
-extract_fred_data = FredApiToS3Operator(
-    task_id='extract_fred_data',
-    fred_series=['GDP', 'UNRATE', 'FEDFUNDS'],
-    s3_bucket='{{ var.value.s3_raw_bucket }}',
-    s3_key='fred_data/{{ ds }}',
-)
-
-# Update dependencies
-extract_financial_data >> extract_fred_data >> create_tables
+class FinancialApiToS3Operator(BaseOperator):
+    """
+    Operator to extract financial data from API and upload to S3
+    """
+    
+    @apply_defaults
+    def __init__(
+        self,
+        companies,
+        report_types,
+        s3_bucket,
+        s3_key,
+        api_key='demo',  # Using Alpha Vantage demo key (limited requests)
+        *args, **kwargs
+    ):
+        super().__init__(*args, **kwargs)
+        self.companies = companies
+        self.report_types = report_types
+        self.s3_bucket = s3_bucket
+        self.s3_key = s3_key
+        self.api_key = api_key
+        
+    def execute(self, context):
+        s3_hook = S3Hook()
+        
+        for company in self.companies:
+            for report_type in self.report_types:
+                self.log.info(f"Extracting {report_type} for {company}")
+                
+                # Call Alpha Vantage API to get financial data
+                if report_type == 'income_statement':
+                    function = 'INCOME_STATEMENT'
+                elif report_type == 'balance_sheet':
+                    function = 'BALANCE_SHEET'
+                elif report_type == 'cash_flow':
+                    function = 'CASH_FLOW'
+                
+                url = f"https://www.alphavantage.co/query?function={function}&symbol={company}&apikey={self.api_key}"
+                response = requests.get(url)
+                data = response.json()
+                
+                # Convert to DataFrame for easier processing
+                if 'annualReports' in data:
+                    df = pd.DataFrame(data['annualReports'])
+                    df['symbol'] = company
+                    df['report_type'] = report_type
+                    
+                    # Save to CSV file
+                    csv_data = df.to_csv(index=False)
+                    
+                    # Upload to S3
+                    s3_hook.load_string(
+                        string_data=csv_data,
+                        key=f"{self.s3_key}/{company}_{report_type}.csv",
+                        bucket_name=self.s3_bucket,
+                        replace=True
+                    )
+                    
+                    self.log.info(f"Uploaded {report_type} for {company} to S3")
+                else:
+                    self.log.warning(f"No data found for {company} {report_type}")
+                    
+                # Respect API rate limits
+                import time
+                time.sleep(15)  # Alpha Vantage free tier has limitations
 ```
 
-### Customizing dbt Models
+### 5. dbt Setup
 
-The dbt models are located in `dbt_project/models/`. To customize:
+Configure dbt for transforming financial data:
 
-1. Modify existing models or create new ones
-2. Update the schema.yml file with descriptions
-3. Create or modify macros for reusable SQL
+**profiles.yml**:
+```yaml
+financial:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: timescaledb
+      user: postgres
+      password: postgres
+      port: 5432
+      dbname: financial
+      schema: public
+      threads: 4
+```
 
-Example of adding a new model:
+**dbt_project.yml**:
+```yaml
+name: 'financial_reporting'
+version: '1.0.0'
+config-version: 2
 
+profile: 'financial'
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  financial_reporting:
+    staging:
+      +materialized: view
+    marts:
+      +materialized: table
+```
+
+Example models:
+
+**models/staging/stg_financial_data.sql**:
 ```sql
--- Create models/marts/economic_indicators.sql
-{{ config(materialized='table') }}
+{{ config(materialized='view') }}
 
-WITH fred_data AS (
-    SELECT * FROM {{ ref('stg_fred_data') }}
+WITH source AS (
+    SELECT 
+        symbol,
+        report_type,
+        fiscal_date,
+        currency,
+        total_revenue,
+        gross_profit,
+        operating_income,
+        net_income
+    FROM raw_financial_data
+    WHERE report_type = 'income_statement'
+),
+
+balance_sheet AS (
+    SELECT 
+        symbol,
+        fiscal_date,
+        total_assets,
+        total_liabilities,
+        total_equity
+    FROM raw_financial_data
+    WHERE report_type = 'balance_sheet'
 )
 
 SELECT
-    date,
-    series_id,
-    value,
-    CASE
-        WHEN series_id = 'GDP' THEN 'Gross Domestic Product'
-        WHEN series_id = 'UNRATE' THEN 'Unemployment Rate'
-        WHEN series_id = 'FEDFUNDS' THEN 'Federal Funds Rate'
-    END AS indicator_name
-FROM fred_data
+    s.symbol,
+    s.fiscal_date,
+    s.currency,
+    s.total_revenue,
+    s.gross_profit,
+    s.operating_income,
+    s.net_income,
+    b.total_assets,
+    b.total_liabilities,
+    b.total_equity
+FROM source s
+LEFT JOIN balance_sheet b
+    ON s.symbol = b.symbol
+    AND s.fiscal_date = b.fiscal_date
 ```
 
-## Maintenance
+**models/marts/financial_kpis.sql**:
+```sql
+{{ config(materialized='table') }}
 
-### Daily Operations
+WITH financial_data AS (
+    SELECT * FROM {{ ref('stg_financial_data') }}
+)
 
-- Monitor Airflow DAG runs for failures
+SELECT
+    symbol,
+    fiscal_date,
+    currency,
+    total_revenue,
+    net_income,
+    gross_profit,
+    operating_income,
+    total_assets,
+    total_liabilities,
+    total_equity,
+    
+    -- Calculate financial KPIs
+    {{ calculate_profit_margin('gross_profit', 'total_revenue') }} AS gross_profit_margin,
+    {{ calculate_profit_margin('operating_income', 'total_revenue') }} AS operating_profit_margin,
+    {{ calculate_profit_margin('net_income', 'total_revenue') }} AS net_profit_margin,
+    {{ calculate_return_on_assets('net_income', 'total_assets') }} AS return_on_assets,
+    {{ calculate_return_on_equity('net_income', 'total_equity') }} AS return_on_equity,
+    (total_assets / NULLIF(total_liabilities, 0)) AS asset_to_liability_ratio
+FROM financial_data
+```
+
+### 6. Metabase Setup
+
+1. Access Metabase at http://localhost:3000
+2. Connect to your TimescaleDB instance
+3. Create questions based on the dbt models
+4. Build dashboards for financial reporting
+
+## Cost Analysis
+
+| Component | AWS Solution | Hybrid Solution | Monthly Savings |
+|-----------|-------------|-----------------|----------------|
+| Storage | S3 (~$2) | S3 (~$2) | $0 |
+| Data Warehouse | Redshift (~$180) | PostgreSQL + TimescaleDB (~$0*) | ~$180 |
+| Orchestration | EC2 for Airflow (~$30) | Self-hosted Airflow (~$0*) | ~$30 |
+| **Total** | **~$212/month** | **~$2/month** + hosting | **~$210/month** |
+
+*Hosting costs depend on deployment choice
+
+## Deployment Options
+
+### 1. Local Development
+Run the entire stack on your local machine for development.
+
+### 2. Self-Hosted Server
+Deploy on an on-premises server or a single cloud VM.
+
+**Estimated costs**: 
+- Small VM (4GB RAM): ~$20/month
+- Medium VM (8GB RAM): ~$40/month
+
+### 3. Hybrid Cloud
+Use AWS S3 for storage but host processing components yourself.
+
+## Maintenance and Operations
+
+### Daily Tasks
+- Monitor Airflow DAG runs
 - Check for API rate limiting issues
 - Verify data freshness in dashboards
 
-### Weekly Maintenance
-
-- Review S3 storage usage
-- Check for failed tasks in Airflow
-- Back up the database
+### Weekly Tasks
+- Check disk space usage
+- Review logs for errors
+- Backup database and configurations
 
 ### Monthly Tasks
-
 - Update API keys if needed
-- Review and optimize dbt models
-- Analyze database performance
+- Apply system updates
+- Review and optimize performance
 
-### Data Retention
+## Extending the Solution
 
-Configure S3 lifecycle policies to manage data retention:
+### Adding New Data Sources
+1. Create a new operator in Airflow plugins
+2. Add new models in dbt
+3. Update dashboards in Metabase
 
-```bash
-# Create lifecycle policy for raw data (keep for 90 days, then move to Glacier)
-aws s3api put-bucket-lifecycle-configuration \
-    --bucket financial-reporting-raw-data \
-    --lifecycle-configuration file://raw-lifecycle-policy.json
-```
-
-Example `raw-lifecycle-policy.json`:
-
-```json
-{
-  "Rules": [
-    {
-      "ID": "Move to Glacier after 90 days",
-      "Status": "Enabled",
-      "Filter": {
-        "Prefix": ""
-      },
-      "Transitions": [
-        {
-          "Days": 90,
-          "StorageClass": "GLACIER"
-        }
-      ]
-    }
-  ]
-}
-```
+### Scaling Up
+For larger datasets:
+1. Increase server resources
+2. Consider partitioning data in TimescaleDB
+3. Implement incremental loading in dbt models
 
 ## Troubleshooting
 
 ### Common Issues
 
-#### Airflow DAG Not Running
-- Check that the DAG is enabled in the Airflow UI
-- Ensure all required connections are configured
-- Check for syntax errors in the DAG file
+**API Rate Limiting**
+- Use multiple API keys
+- Implement retry logic with backoff
+- Stagger API requests
 
-#### API Rate Limiting
-- Alpha Vantage free tier has a limit of 5 API calls per minute and 500 per day
-- Implement exponential backoff in the API operator
-- Consider using a paid API tier for production
+**S3 Access Issues**
+- Verify IAM permissions
+- Check AWS credentials in environment variables
+- Test connection with `aws s3 ls`
 
-#### S3 Access Issues
-- Verify IAM permissions are correctly configured
-- Check that the AWS credentials are correctly set in the environment
-- Ensure S3 bucket names are correct in the configuration
-
-#### Database Connection Issues
-- Verify the database is running
-- Check connection strings in the Airflow connection settings
-- Ensure the database user has appropriate permissions
-
-### Logs and Debugging
-
-- Airflow logs: Available in the Airflow UI or in `./logs/dag_id/task_id/`
-- Container logs: `docker-compose logs -f [service_name]`
-- PostgreSQL logs: `docker-compose logs -f postgres`
+**Pipeline Failures**
+- Check Airflow logs
+- Verify database connections
+- Test API connectivity
 
 ## Contributing
 
-We welcome contributions to improve this cookbook!
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
-
----
-
-## Quick Reference
-
-### URLs
-- Airflow: http://localhost:8080
-- Metabase: http://localhost:3000
-
-### Docker Commands
-```bash
-# Start all services
-docker-compose up -d
-
-# Stop all services
-docker-compose down
-
-# View logs
-docker-compose logs -f [service_name]
-
-# Execute command in a container
-docker-compose exec [service_name] [command]
-```
-
-### Airflow Commands
-```bash
-# Create a connection
-docker-compose exec airflow airflow connections add 's3_conn' \
-    --conn-type 's3' \
-    --conn-extra '{"aws_access_key_id":"your_access_key", "aws_secret_access_key":"your_secret_key", "region_name":"us-east-1"}'
-
-# List DAGs
-docker-compose exec airflow airflow dags list
-
-# Trigger a DAG
-docker-compose exec airflow airflow dags trigger financial_reporting_pipeline
-```
-
-### dbt Commands
-```bash
-# Run dbt models
-docker-compose exec dbt dbt run
-
-# Generate documentation
-docker-compose exec dbt dbt docs generate
-
-# Test models
-docker-compose exec dbt dbt test
-```
